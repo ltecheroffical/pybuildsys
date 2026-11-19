@@ -1,20 +1,22 @@
 from typing import Callable
 
-
 import traceback
 
+import queue
 import threading
 
 from . import Build, Builder
 
 def execute(builder: Builder, jobs=1) -> None:
-    builds: list[Build] = []
+    builds = queue.Queue()
+
     stop = False
+    exception: Exception | None = None
 
     def build_command(command: Build):
         for dep in command.depends:
             if not dep():
-                builds.append(command)
+                builds.put(command)
                 return
 
         try:
@@ -24,7 +26,7 @@ def execute(builder: Builder, jobs=1) -> None:
             for finish in command.finished:
                 build = finish()
                 if isinstance(build, Build):
-                    builds.append(build)
+                    builds.put(build)
 
         except Exception as e:
             build_traceback = "".join(traceback.format_list(command.creation_traceback))
@@ -36,21 +38,20 @@ Traceback (most recent call last):
             raise
 
     def build_thread_func():
-        nonlocal stop
+        nonlocal exception
 
-        while True:
-            if len(builds) <= 0:
+        while not exception:
+            try:
+                build = builds.get(timeout=0.1)
+                try:
+                    build_command(build)
+                except Exception as e:
+                    exception = e
+                finally:
+                    builds.task_done()
+            except queue.Empty:
                 if stop:
                     break
-
-                continue
-
-            build = builds.pop(0)
-            try:
-                build_command(build)
-            except Exception:
-                stop = True
-                builds.clear()
 
     build_threads = []
     for _ in range(jobs):
@@ -61,10 +62,13 @@ Traceback (most recent call last):
             thread.start()
 
         for build in builder:
-            builds.append(build)
+            builds.put(build)
     finally:
         stop = True
         for thread in build_threads:
             if thread.is_alive():
                 thread.join()
+
+    if exception:
+        raise exception
 

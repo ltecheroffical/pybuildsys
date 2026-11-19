@@ -20,4 +20,4 @@ def build_project():
     yield from print_hello2()
 
 if __name__ == "__main__":
-    pybuildsys.execute(build_project(), jobs=2)
+    pybuildsys.execute(build_project(), jobs=multiprocessing.cpu_count())
