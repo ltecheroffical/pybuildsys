@@ -23,8 +23,12 @@ class Build:
     def target(cls, builder: Builder) -> Self:
         return cls().on_finish_builder(builder)
 
-    def add_condition(self, condition: Callable[[], bool]) -> Self:
+    def and_condition(self, condition: Callable[[], bool]) -> Self:
         self.condition = lambda old=self.condition: old() and condition()
+        return self
+
+    def or_condition(self, condition: Callable[[], bool]) -> Self:
+        self.condition = lambda old=self.condition: old() or condition()
         return self
 
     def depends_on(self, dependency: Dependency) -> Self:

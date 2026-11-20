@@ -186,29 +186,29 @@ class Toolchain:
 def cc(toolchain: Toolchain, output: str, *sources: str) -> Build:
     return (
         shell(toolchain.cc, *toolchain.cflags.compute(toolchain.cc, output, *sources))
-            .add_condition(c_changed(output, *sources))
+            .and_condition(c_changed(output, *sources))
     )
 
 def cxx(toolchain: Toolchain, output: str, *sources: str) -> Build:
     return (
         shell(toolchain.cc, *toolchain.cxxflags.compute(toolchain.cxx, output, *sources))
-            .add_condition(c_changed(output, *sources))
+            .and_condition(c_changed(output, *sources))
     )
 
 def ld(toolchain: Toolchain, output: str, *objects: str) -> Build:
     return (
         shell(toolchain.ld, *toolchain.ldflags.compute(toolchain.ld, output, *objects))
-            .add_condition(changed(output, *objects, *toolchain.ldflags.static_libs))
+            .and_condition(changed(output, *objects, *toolchain.ldflags.static_libs))
     )
 
 def ar(toolchain: Toolchain, output: str, *objects: str) -> Build:
     return (
         shell(toolchain.ar, *toolchain.arflags.compute(toolchain.ar, output, *objects))
-            .add_condition(changed(output, *objects))
+            .and_condition(changed(output, *objects))
     )
 
 def objcopy(toolchain: Toolchain, output: str, infile: str) -> Build:
     return (
         shell(toolchain.objcopy, "-O", "binary", infile, output)
-            .add_condition(changed(output, infile))
+            .and_condition(changed(output, infile))
     )
