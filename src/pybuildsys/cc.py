@@ -65,10 +65,7 @@ def c_changed(output: str, *sources: str) -> Callable[[], bool]:
 
             deps = result.split(":")[1].split()
 
-        if changed(output, *(list(sources) + deps))():
-            return True
-
-        return False
+        return changed(output, *sources, *deps)()
 
     return func
 
@@ -78,6 +75,8 @@ class CFlags:
     strict: bool = False
 
     std: str | None = "c99"
+    stdlib: bool = True
+    freestanding: bool = False
 
     include: list[str] = field(default_factory=list)
 
@@ -98,6 +97,12 @@ class CFlags:
 
             if self.std:
                 flags.append(f"-std={self.std}")
+
+            if not self.stdlib:
+                flags.append("-nostdinc")
+
+            if self.freestanding:
+                flags.append("-ffreestanding")
 
             for include in self.include:
                 flags.append(f"-I{include}")
@@ -162,6 +167,7 @@ class Toolchain:
     cxx: str = "g++"
     ld: str = "gcc"
     ar: str = "ar"
+    objcopy: str = "objcopy"
 
     cflags: CFlags = field(default_factory=CFlags)
     cxxflags: CFlags = field(default_factory=CFlags)
@@ -171,6 +177,9 @@ class Toolchain:
     def with_c_prefix(self, prefix: str) -> Self:
         self.cc = prefix + self.cc
         self.cxx = prefix + self.cxx
+        self.ld = prefix + self.ld
+        self.ar = prefix + self.ar
+        self.objcopy = prefix + self.objcopy
 
         return self
 
@@ -189,11 +198,17 @@ def cxx(toolchain: Toolchain, output: str, *sources: str) -> Build:
 def ld(toolchain: Toolchain, output: str, *objects: str) -> Build:
     return (
         shell(toolchain.ld, *toolchain.ldflags.compute(toolchain.ld, output, *objects))
-            .add_condition(changed(output, *objects))
+            .add_condition(changed(output, *objects, *toolchain.ldflags.static_libs))
     )
 
 def ar(toolchain: Toolchain, output: str, *objects: str) -> Build:
     return (
         shell(toolchain.ar, *toolchain.arflags.compute(toolchain.ar, output, *objects))
             .add_condition(changed(output, *objects))
+    )
+
+def objcopy(toolchain: Toolchain, output: str, infile: str) -> Build:
+    return (
+        shell(toolchain.objcopy, "-O", "binary", infile, output)
+            .add_condition(changed(output, infile))
     )
