@@ -20,8 +20,8 @@ class Build:
         self.finished = []
 
     @classmethod
-    def target(cls, *builders: Builder) -> Self:
-        return cls().on_finish_builder(*builders)
+    def target(cls, builder: Builder) -> Self:
+        return cls().on_finish_builder(builder)
 
     def add_condition(self, condition: Callable[[], bool]) -> Self:
         self.condition = lambda old=self.condition: old() and condition()
@@ -35,17 +35,16 @@ class Build:
         self.finished.append(finish)
         return self
 
-    def on_finish_builder(self, *builders: Builder) -> Self:
-        last = self
-        for builder in builders:
-            for build in builder:
-                last.finished.append(lambda ret=build: ret)
-                last = build
+    def on_finish_builder(self, builder: Builder) -> Self:
+        for build in builder:
+            self.finished.append(lambda ret=build: ret)
+
         return self
 
 from . import build
 from . import conditions
 from . import executor
 from . import cc
+from . import stage
 
 from .executor import execute
