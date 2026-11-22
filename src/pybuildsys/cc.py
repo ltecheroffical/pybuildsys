@@ -5,9 +5,9 @@ import subprocess
 from typing import Callable, Self
 from dataclasses import dataclass, field
 
-from pybuildsys import Build
-from pybuildsys.build import shell
-from pybuildsys.conditions import changed
+from . import Build, Target
+from . import shell
+from .conditions import changed
 
 def c_compiler_vendor(compiler: str) -> str | None:
     result = subprocess.run(
@@ -51,23 +51,20 @@ def c_archiver_vendor(archiver: str) -> str | None:
 
     return None
 
-def c_changed(output: str, *sources: str) -> Callable[[], bool]:
-    def func():
-        deps = []
-        dep_file = os.path.splitext(output)[0] + ".d"
+def c_changed(output: str, *sources: str) -> bool:
+    deps = []
+    dep_file = os.path.splitext(output)[0] + ".d"
 
-        if os.path.exists(dep_file):
-            result = ""
-            with open(dep_file, "r") as f:
-                result = f.readline()[:-1]
-                while result[len(result)-1] == "\\":
-                    result = result[:-1] + f.readline().rstrip("\n")
+    if os.path.exists(dep_file):
+        result = ""
+        with open(dep_file, "r") as f:
+            result = f.readline()[:-1]
+            while result[len(result)-1] == "\\":
+                result = result[:-1] + f.readline().rstrip("\n")
 
-            deps = result.split(":")[1].split()
+        deps = result.split(":")[1].split()
 
-        return changed(output, *sources, *deps)()
-
-    return func
+    return changed(output, *sources, *deps)
 
 @dataclass
 class CFlags:
@@ -184,31 +181,16 @@ class Toolchain:
         return self
 
 def cc(toolchain: Toolchain, output: str, *sources: str) -> Build:
-    return (
-        shell(toolchain.cc, *toolchain.cflags.compute(toolchain.cc, output, *sources))
-            .and_condition(c_changed(output, *sources))
-    )
+    return shell(toolchain.cc, *toolchain.cflags.compute(toolchain.cc, output, *sources))
 
 def cxx(toolchain: Toolchain, output: str, *sources: str) -> Build:
-    return (
-        shell(toolchain.cc, *toolchain.cxxflags.compute(toolchain.cxx, output, *sources))
-            .and_condition(c_changed(output, *sources))
-    )
+    return shell(toolchain.cxx, *toolchain.cxxflags.compute(toolchain.cxx, output, *sources))
 
 def ld(toolchain: Toolchain, output: str, *objects: str) -> Build:
-    return (
-        shell(toolchain.ld, *toolchain.ldflags.compute(toolchain.ld, output, *objects))
-            .and_condition(changed(output, *objects, *toolchain.ldflags.static_libs))
-    )
+    return shell(toolchain.ld, *toolchain.ldflags.compute(toolchain.ld, output, *objects))
 
 def ar(toolchain: Toolchain, output: str, *objects: str) -> Build:
-    return (
-        shell(toolchain.ar, *toolchain.arflags.compute(toolchain.ar, output, *objects))
-            .and_condition(changed(output, *objects))
-    )
+    return shell(toolchain.ar, *toolchain.arflags.compute(toolchain.ar, output, *objects))
 
 def objcopy(toolchain: Toolchain, output: str, infile: str) -> Build:
-    return (
-        shell(toolchain.objcopy, "-O", "binary", infile, output)
-            .and_condition(changed(output, infile))
-    )
+    return shell(toolchain.objcopy, "-O", "binary", infile, output)

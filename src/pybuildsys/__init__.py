@@ -1,51 +1,84 @@
-from typing import Callable, Self
-from collections.abc import Iterator
+from dataclasses import dataclass
+import functools
 
-import traceback
+from typing import Callable, Iterator, ParamSpec, Self
 
-type Builder = Iterator[Build]
+import os
+import subprocess
 
-class Build:
-    type Dependency = Callable[[], bool]
+P = ParamSpec("P")
 
-    def __init__(self, func: Callable = lambda: None):
-        self.creation_traceback = traceback.extract_stack()
-        self.creation_traceback.pop(len(self.creation_traceback)-1)
 
-        self.func = func
-        self.condition = lambda: True
+class RetryException(Exception):
+    """
+    Raise this to restart the target at a later time
+    """
 
-        self.depends = []
+    def __init__(self) -> None:
+        super().__init__()
 
-        self.finished = []
+@dataclass
+class Special:
+    pass
 
-    @classmethod
-    def target(cls, builder: Builder) -> Self:
-        return cls().on_finish_builder(builder)
+type Build = Callable
+type Target = Iterator[Build | Target | Special]
 
-    def and_condition(self, condition: Callable[[], bool]) -> Self:
-        self.condition = lambda old=self.condition: old() and condition()
-        return self
+@dataclass
+class Later(Special):
+    """
+    Yield this to continue the target at a later time
+    """
 
-    def or_condition(self, condition: Callable[[], bool]) -> Self:
-        self.condition = lambda old=self.condition: old() or condition()
-        return self
+    pass
 
-    def depends_on(self, dependency: Dependency) -> Self:
-        self.depends.append(dependency)
-        return self
+@dataclass
+class WrapTarget(Later):
+    wrapper: Callable[[Target], Target]
 
-    def on_finish(self, finish: Callable[[], Self | None]) -> Self:
-        self.finished.append(finish)
-        return self
+@dataclass
+class Barrier(Later):
+    """
+    Yield this to wait until there are no more targets in the queue
+    """
 
-    def on_finish_builder(self, builder: Builder) -> Self:
-        for build in builder:
-            self.finished.append(lambda ret=build: ret)
+    pass
 
-        return self
+class DependsOn(WrapTarget):
+    def __init__(self, depends_on: Callable[[], bool]) -> None:
+        def wrapper(target: Target):
+            while not depends_on():
+                yield Later()
 
-from . import build
+            yield from target
+
+        super().__init__(wrapper)
+
+def target():
+    def annotator(func: Callable[P, Target]):
+        @functools.wraps(func)
+        def inner(*args: P.args, **kwargs: P.kwargs) -> Target:
+            while True:
+                try:
+                    yield from func(*args, **kwargs)
+                except RetryException:
+                    continue
+                
+                break
+
+        return inner
+
+    return annotator
+
+def shell(path, *args, env=os.environ, silent=False) -> Build:
+    def build():
+        if not silent:
+            print(path, *args)
+
+        subprocess.run([path, *args]).check_returncode()
+
+    return build
+
 from . import conditions
 from . import executor
 from . import cc

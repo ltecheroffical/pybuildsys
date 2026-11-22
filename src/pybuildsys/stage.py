@@ -1,6 +1,6 @@
 from typing import Callable
 
-from . import Build
+from . import Build, DependsOn
 
 class Stage:
     def __init__(self) -> None:
@@ -14,6 +14,3 @@ class Stage:
 
     def complete(self) -> None:
         self.completed += 1
-
-    def build(self, build: Build) -> Build:
-        return build.depends_on(self.next()).on_finish(self.complete)
